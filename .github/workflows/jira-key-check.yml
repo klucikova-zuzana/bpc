@@ -1,0 +1,31 @@
+name: Jira key check
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  jira-key:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title and branch name for a SCRUM key
+        # Passed via env, not ${{ }} in the script, so a crafted PR title can't inject shell code.
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          status=0
+          if [[ ! "$PR_TITLE" =~ SCRUM-[0-9]+ ]]; then
+            echo "::error::PR title has no Jira key (expected e.g. 'SCRUM-11: ...'): $PR_TITLE"
+            status=1
+          fi
+          if [[ ! "$BRANCH" =~ SCRUM-[0-9]+ ]]; then
+            echo "::error::Branch name has no Jira key (expected e.g. 'SCRUM-11-setup-script'): $BRANCH"
+            status=1
+          fi
+          if [[ $status -eq 0 ]]; then
+            echo "OK: PR title and branch name contain a Jira key."
+          fi
+          exit $status
