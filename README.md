@@ -1,6 +1,37 @@
 # bpc
 BizPartnerCheck
 
+## Setup
+
+The setup script creates the database schema and the one Super Admin account (DI-01).
+It runs on Cloudflare D1 through `wrangler`.
+
+Prerequisites: Node.js 22.5 or later, and `npm install`.
+
+```sh
+# Local development database (stored in .wrangler/)
+SUPER_ADMIN_EMAIL=ops@example.com npm run setup
+
+# Cloudflare D1 (needs `npx wrangler login` and the real database_id in wrangler.toml)
+SUPER_ADMIN_EMAIL=ops@example.com npm run setup -- --remote
+```
+
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `SUPER_ADMIN_EMAIL` | yes | E-mail address of the Super Admin |
+| `SUPER_ADMIN_PASSWORD` | no | Initial password, at least 12 characters. If unset, a random one is generated and printed once. |
+| `D1_DATABASE` | no | D1 database name, default `bpc` |
+
+What the script does:
+
+1. Applies all migrations in `migrations/` that have not run yet.
+2. Creates the Super Admin with a hashed password, marked so the password must be changed at first login (assumption for OI-08).
+
+Running it again is safe: already applied migrations are skipped, and if a Super Admin exists it prints its e-mail and creates nothing.
+The database also refuses a second Super Admin through a unique index.
+
+Run the tests with `npm test`.
+
 ## Contributing
 
 Every change must be traceable to a backlog item in Jira (project key `SCRUM`).

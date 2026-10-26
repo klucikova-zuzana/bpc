@@ -1,0 +1,9 @@
+name = "bpc"
+compatibility_date = "2026-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bpc"
+# Replace with the id printed by `npx wrangler d1 create bpc --location weur` (DI-02).
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
