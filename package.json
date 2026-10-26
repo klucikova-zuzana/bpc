@@ -1,0 +1,17 @@
+{
+  "name": "bpc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "BizPartnerCheck",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.js",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "wrangler": "4.153.0"
+  }
+}
