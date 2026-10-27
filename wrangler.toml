@@ -19,6 +19,6 @@ enabled = true
 [[d1_databases]]
 binding = "DB"
 database_name = "bpc"
-# Replace with the id printed by `npx wrangler d1 create bpc --location weur` (DI-02).
-database_id = "00000000-0000-0000-0000-000000000000"
+# Created with `npx wrangler d1 create bpc --location weur` (DI-02).
+database_id = "495b6010-eb07-46ae-b933-c1eca46818fd"
 migrations_dir = "migrations"
