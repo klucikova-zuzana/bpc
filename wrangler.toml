@@ -1,9 +1,24 @@
 name = "bpc"
+main = "src/index.js"
 compatibility_date = "2026-10-01"
+
+# DI-02: one domain for every organisation, web app and API. The workers.dev
+# and preview URLs are switched off so this is the only public address.
+routes = [{ pattern = "bpc.hsynrsd.dev", custom_domain = true }]
+workers_dev = false
+preview_urls = false
+
+[assets]
+directory = "public"
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
+
+[observability]
+enabled = true
 
 [[d1_databases]]
 binding = "DB"
 database_name = "bpc"
-# Replace with the id printed by `npx wrangler d1 create bpc --location weur` (DI-02).
-database_id = "00000000-0000-0000-0000-000000000000"
+# Created with `npx wrangler d1 create bpc --location weur` (DI-02).
+database_id = "495b6010-eb07-46ae-b933-c1eca46818fd"
 migrations_dir = "migrations"
