@@ -32,6 +32,25 @@ The database also refuses a second Super Admin through a unique index.
 
 Run the tests with `npm test`.
 
+## Deploy
+
+The app runs on Cloudflare Workers at **https://bpc.hsynrsd.dev** (DI-02).
+One Worker serves both parts on that domain: the web app as static files from `public/`, and the API under `/api/*` from `src/index.js`.
+The workers.dev address is switched off, so every organisation uses the same domain.
+
+```sh
+npm run dev      # local server with a local D1 database
+npm run deploy   # deploy to https://bpc.hsynrsd.dev (needs `npx wrangler login`)
+```
+
+`GET /api/health` returns `{"status":"ok"}` when the Worker and the database are reachable.
+
+First deployment on a new Cloudflare account:
+
+1. `npx wrangler d1 create bpc --location weur` and put the printed `database_id` in `wrangler.toml`.
+2. `SUPER_ADMIN_EMAIL=... npm run setup -- --remote` to create the schema and the Super Admin.
+3. `npm run deploy`. Wrangler creates the custom domain and its TLS certificate. The zone (`hsynrsd.dev`) must be on the same Cloudflare account.
+
 ## Contributing
 
 Every change must be traceable to a backlog item in Jira (project key `SCRUM`).
