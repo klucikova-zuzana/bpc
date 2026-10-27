@@ -51,6 +51,17 @@ First deployment on a new Cloudflare account:
 2. `SUPER_ADMIN_EMAIL=... npm run setup -- --remote` to create the schema and the Super Admin.
 3. `npm run deploy`. Wrangler creates the custom domain and its TLS certificate. The zone (`hsynrsd.dev`) must be on the same Cloudflare account.
 
+## Availability
+
+QS-AVL-01: the service is available as far as the hosting provider guarantees.
+
+- **Provider:** Cloudflare Workers (Workers Paid plan) with Cloudflare D1.
+- **Guarantee:** none in a contract. On this plan Cloudflare gives no uptime guarantee, so availability is best effort.
+  The [Workers SLA](https://www.cloudflare.com/workers-service-level-agreement) (target of 99.99% monthly uptime, service credits as the only remedy) belongs to Cloudflare's Enterprise agreements.
+  It covers the Workers runtime only, not D1 or other Cloudflare services.
+- **Maintenance windows:** none planned. `npm run deploy` replaces the Worker without downtime.
+- **Checking it:** `GET https://bpc.hsynrsd.dev/api/health` returns 200 when the Worker and the database are up, and 503 when the database is unreachable.
+
 ## Contributing
 
 Every change must be traceable to a backlog item in Jira (project key `SCRUM`).
