@@ -51,6 +51,15 @@ First deployment on a new Cloudflare account:
 2. `SUPER_ADMIN_EMAIL=... npm run setup -- --remote` to create the schema and the Super Admin.
 3. `npm run deploy`. Wrangler creates the custom domain and its TLS certificate. The zone (`hsynrsd.dev`) must be on the same Cloudflare account.
 
+## Password reset
+
+SCRUM-15: users who forgot their password open `/reset-password.html`, enter their e-mail address and get a link that works once for 30 minutes.
+
+- `POST /api/password-reset` `{ "email" }` always answers 202, so it does not reveal which addresses have an account. At most 3 links per user per hour.
+- `POST /api/password-reset/confirm` `{ "token", "password" }` answers 204, or 400 with `INVALID_LINK`, `PASSWORD_TOO_SHORT` or `PASSWORD_TOO_LONG`.
+- Apply the new table with `npx wrangler d1 migrations apply bpc --remote` (or `npm run setup -- --remote`).
+- E-mails are only logged until a provider is set: `npx wrangler secret put RESEND_API_KEY` and `npx wrangler secret put MAIL_FROM`.
+
 ## BMF feed (FR-DOC-06)
 
 Once a day at 04:17 UTC (05:17 Vienna time in winter) a Cron Trigger runs the Worker's `scheduled` handler, which fetches the BMF fake company feed (SCRUM-18, `src/bmf-feed.js`).

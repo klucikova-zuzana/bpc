@@ -3,9 +3,19 @@
 // web app and the API share one domain.
 
 import { refreshBmfFeed } from './bmf-feed.js';
+import { createMailer } from './mail.js';
+import { confirmPasswordReset, languageOf, requestPasswordReset } from './password-reset.js';
 
 function json(body, status = 200) {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
+}
+
+async function readJson(request) {
+  try {
+    return await request.json();
+  } catch {
+    return {};
+  }
 }
 
 async function health(env) {
@@ -17,10 +27,33 @@ async function health(env) {
   }
 }
 
+// SCRUM-15
+async function passwordReset(request, env, ctx) {
+  const { email } = await readJson(request);
+  if (typeof email !== 'string' || !email.includes('@')) return json({ error: 'INVALID_EMAIL' }, 400);
+
+  const deps = { db: env.DB, mailer: createMailer(env), baseUrl: new URL(request.url).origin };
+  // Work after answering, so known and unknown addresses take the same time.
+  ctx.waitUntil(
+    requestPasswordReset(deps, email, languageOf(request)).catch((error) =>
+      console.error('Password reset request failed', error.message), // no e-mail address in logs
+    ),
+  );
+  return json({ status: 'If an active account uses this address, a reset link has been sent.' }, 202);
+}
+
+async function passwordResetConfirm(request, env) {
+  const { token, password } = await readJson(request);
+  const result = await confirmPasswordReset({ db: env.DB }, token, password);
+  return result.ok ? new Response(null, { status: 204 }) : json({ error: result.error }, 400);
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
     if (pathname === '/api/health') return health(env);
+    if (request.method === 'POST' && pathname === '/api/password-reset') return passwordReset(request, env, ctx);
+    if (request.method === 'POST' && pathname === '/api/password-reset/confirm') return passwordResetConfirm(request, env);
     if (pathname.startsWith('/api/')) return json({ error: 'Not found' }, 404);
     return env.ASSETS.fetch(request);
   },
