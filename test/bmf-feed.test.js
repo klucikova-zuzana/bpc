@@ -12,7 +12,6 @@ import { test } from 'node:test';
 import { DEFAULT_BMF_FEED_URL, decodeFeed, parseBmfFeed, parseFeedDate, refreshBmfFeed } from '../src/bmf-feed.js';
 import worker from '../src/index.js';
 
-// ------------------------------------------------------------------ helpers
 
 const migrationsDir = new URL('../migrations/', import.meta.url);
 
@@ -25,9 +24,6 @@ function databaseWithAllMigrations() {
   return db;
 }
 
-// The small part of the D1 API the job uses, on top of node:sqlite.
-// batch() runs as one transaction, and at most 100 values can be bound to one
-// statement, like D1.
 function d1(db) {
   const statement = (sql, params = []) => ({
     sql,
@@ -88,7 +84,6 @@ const entries = (sqlite) =>
     .all()
     .map((row) => ({ ...row }));
 
-// ------------------------------------------------------------------ reading the feed
 
 test('the ISO-8859-1 feed is decoded so umlauts stay intact', () => {
   const text = decodeFeed(feedBytes());

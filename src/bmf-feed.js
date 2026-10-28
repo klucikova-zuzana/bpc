@@ -11,10 +11,7 @@ export const DEFAULT_BMF_FEED_URL = 'https://service.bmf.gv.at/service/allg/lsu/
 
 const TIMEOUT_MS = 30_000;
 
-// ---------------------------------------------------------------- decoding
-
 // Windows-1252 characters for the bytes 0x80-0x9F. Browsers decode ISO-8859-1
-// this way too; every other byte maps to the code point with the same number.
 const CP1252_80_9F =
   '€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008DŽ\u008F' +
   '\u0090‘’“”•–—˜™š›œ\u009DžŸ';
@@ -113,7 +110,6 @@ export function parseBmfFeed(xml) {
   return { publishedAt, entries };
 }
 
-// ---------------------------------------------------------------- the daily job
 
 const INSERT_FETCH = `INSERT INTO bmf_feed_fetches (fetched_at, status, feed_published_at, entry_count, error)
 VALUES (?, ?, ?, ?, ?)`;
