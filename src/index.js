@@ -5,9 +5,10 @@
 import { bearerToken, tokenUser } from './api-token.js';
 import { clerkIdentity, currentUser } from './auth.js';
 import { refreshBmfFeed } from './bmf-feed.js';
-import { startCheck } from './check-request.js';
+import { getRequestRecord, startCheck } from './check-request.js';
 import { languageOf } from './language.js';
 import { registerOrganisation } from './registration.js';
+import { getToken, getUser, listRequests, listTokens, listUsers, parseId } from './tenant.js';
 
 function json(body, status = 200) {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -102,9 +103,42 @@ async function startCheckRoute(request, env) {
   return json({ error: result.error }, result.error === 'FORBIDDEN' ? 403 : 400);
 }
 
+// SCRUM-40 / FR-USR-05: reading requests, users and tokens. Each kind has a
+// list (GET /api/<kind>) and a single item (GET /api/<kind>/<id>); both only
+// ever look inside the caller's own organisation (src/tenant.js).
+// roles: who may read this kind at all (SRS section 2.4).
+const ANY_ORG_ROLE = ['ADMIN', 'REQUEST_USER', 'REVIEW_USER'];
+const READABLE = {
+  requests: { roles: ANY_ORG_ROLE, list: listRequests, get: getRequestRecord, one: 'request' },
+  users: { roles: ['ADMIN'], list: listUsers, get: getUser, one: 'user' },
+  tokens: { roles: ['ADMIN'], list: listTokens, get: getToken, one: 'token' },
+};
+
+async function readRoute(request, env, kind, idText) {
+  const caller = await apiCaller(request, env);
+  if (!caller.user) return unauthorized(caller);
+
+  // The Super Admin is outside every organisation, so there is nothing to show.
+  const { organisationId, role } = caller.user;
+  const { roles, list, get, one } = READABLE[kind];
+  if (organisationId == null || !roles.includes(role)) return json({ error: 'FORBIDDEN' }, 403);
+
+  const deps = { db: env.DB };
+  if (idText === undefined) return json({ [kind]: await list(deps, organisationId) });
+
+  // 404 for an ID of another organisation, the same as for an ID that does not exist.
+  const id = parseId(idText);
+  const item = id === null ? null : await get(deps, organisationId, id);
+  return item ? json({ [one]: item }) : json({ error: 'NOT_FOUND' }, 404);
+}
+
+const READ_PATH = /^\/api\/(requests|users|tokens)(?:\/([^/]+))?$/;
+
 export default {
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
+    const read = request.method === 'GET' ? READ_PATH.exec(pathname) : null;
+    if (read) return readRoute(request, env, read[1], read[2]);
     if (pathname === '/api/health') return health(env);
     if (request.method === 'POST' && pathname === '/api/organisations') return register(request, env);
     if (request.method === 'GET' && pathname === '/api/config') return config(env);
