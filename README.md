@@ -106,6 +106,22 @@ curl -X POST https://bpc.hsynrsd.dev/api/requests \
 - A request started with a token stores the token's user and `api_token_id` in `requests` and `audit_log` (FR-DOC-01). `last_used_at` is updated on each call.
 - `api_tokens` keeps only the SHA-256 hash of a token (`src/api-token.js`). Creating tokens in the web app is SCRUM-59.
 
+## Tenant isolation (FR-USR-05)
+
+SCRUM-40: a user only sees data of their own organisation, in the web app (Clerk session) and over the API (token).
+
+| Route | Who | Answer |
+| --- | --- | --- |
+| `GET /api/requests`, `GET /api/requests/<id>` | every role of the organisation | `{ requests: [...] }`, `{ request }` with its checks |
+| `GET /api/users`, `GET /api/users/<id>` | Organisation Admin | `{ users: [...] }`, `{ user }` |
+| `GET /api/tokens`, `GET /api/tokens/<id>` | Organisation Admin | `{ tokens: [...] }`, `{ token }` (never the secret or its hash) |
+
+- Lists contain only rows of the caller's organisation.
+- Opening an ID of another organisation gives 404 `NOT_FOUND`, the same answer as for an ID that does not exist, so nobody can find out which IDs exist elsewhere.
+- A role that may not read that kind of data gets 403 `FORBIDDEN`. The Super Admin belongs to no organisation and gets 403 on all of these routes.
+- How it works: every query in `src/tenant.js` (and `getRequestRecord()` in `src/check-request.js`) takes the caller's `organisationId` and has it in its `WHERE` clause. New routes that read or change requests, users or tokens must use these functions and never query by ID alone.
+- `test/tenant-isolation.test.js` covers requests, users and tokens with two organisations.
+
 ## BMF feed (FR-DOC-06)
 
 Once a day at 04:17 UTC (05:17 Vienna time in winter) a Cron Trigger runs the Worker's `scheduled` handler, which fetches the BMF fake company feed (SCRUM-18, `src/bmf-feed.js`).
