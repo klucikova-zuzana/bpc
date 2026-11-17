@@ -5,7 +5,8 @@
 import { bearerToken, tokenUser } from './api-token.js';
 import { clerkIdentity, currentUser } from './auth.js';
 import { refreshBmfFeed } from './bmf-feed.js';
-import { getRequestRecord, startCheck } from './check-request.js';
+import { createAdapters } from './adapters/index.js';
+import { getRequestRecord, runAndSaveChecks, startCheck } from './check-request.js';
 import { languageOf } from './language.js';
 import { registerOrganisation } from './registration.js';
 import { getToken, getUser, listRequests, listTokens, listUsers, parseId } from './tenant.js';
@@ -90,7 +91,7 @@ async function appPage(request, env) {
 }
 
 // SCRUM-16: POST /api/requests { vat, fn } -> 202 { requestId }
-async function startCheckRoute(request, env) {
+async function startCheckRoute(request, env, ctx) {
   // Same check as /api/me: API token or Clerk session.
   const caller = await apiCaller(request, env);
   if (!caller.user) return unauthorized(caller);
@@ -99,8 +100,15 @@ async function startCheckRoute(request, env) {
   const { vat, fn } = body;
   const result = await startCheck({ db: env.DB, apiTokenId: caller.apiTokenId }, caller.user, { vat, fn });
 
-  if (result.ok) return json({ requestId: result.requestId }, 202);
-  return json({ error: result.error }, result.error === 'FORBIDDEN' ? 403 : 400);
+  if (!result.ok) return json({ error: result.error }, result.error === 'FORBIDDEN' ? 403 : 400);
+  // for scrum-56; run the checks after answering, so the caller gets the ID at once.
+  const run = runAndSaveChecks({ db: env.DB, adapters: createAdapters(env) }, result.requestId).catch((error) =>
+    console.error(`Checks for request ${result.requestId} failed: ${error.message}`),
+  );
+  // the tests call the worker without ctx, so they wait for the checks instead.
+  if (ctx?.waitUntil) ctx.waitUntil(run);
+  else await run;
+  return json({ requestId: result.requestId }, 202);
 }
 
 // SCRUM-40 / FR-USR-05: reading requests, users and tokens. Each kind has a
@@ -143,7 +151,7 @@ export default {
     if (request.method === 'POST' && pathname === '/api/organisations') return register(request, env);
     if (request.method === 'GET' && pathname === '/api/config') return config(env);
     if (request.method === 'GET' && pathname === '/api/me') return me(request, env);
-    if (request.method === 'POST' && pathname === '/api/requests') return startCheckRoute(request, env);
+    if (request.method === 'POST' && pathname === '/api/requests') return startCheckRoute(request, env, ctx);
     if (pathname.startsWith('/api/')) return json({ error: 'Not found' }, 404);
     if (pathname === '/app' || pathname.startsWith('/app/')) return appPage(request, env);
     return env.ASSETS.fetch(request);
