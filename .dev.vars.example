@@ -16,9 +16,9 @@ VIES_TEST_URL=https://ec.europa.eu/taxation_customs/vies/rest-api/check-vat-test
 # Test system with fixed test data (e.g. ATU12345676 is on the list for
 # Stichtag 2014-07-01 to 2014-08-31): https://www.sozialversicherung.at/agh-ws-tt/DienstgeberAbfrageWS_3_0
 HFU_URL=https://www.sozialversicherung.at/agh-ws-prod/DienstgeberAbfrageWS_3_0
-# UID of the asking party (uidAuftraggeber). The ÖGK logs it with every query.
-# Open question for the customer: platform operator's UID or the organisation's own UID?
-HFU_REQUESTER_UID=ATU00000000
+# UID of the asking party (uidAuftraggeber). The service requires it.
+# Customer decision (17 Nov 2026): use the test UID ATU12345678.
+HFU_REQUESTER_UID=ATU12345678
 
 # BMF fake company feed, Liste der Scheinunternehmen (FR-DOC-06).
 BMF_FEED_URL=https://service.bmf.gv.at/service/allg/lsu/rss_lsu.asp

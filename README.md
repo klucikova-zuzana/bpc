@@ -159,7 +159,7 @@ The HFU adapter (SCRUM-67, `src/adapters/hfu.js`) asks the AGH web service of th
 - On the list as employer (§ 67b ASVG) or as one-person company (§ 67e ASVG) is `VALID`; `details.listedAs` says which.
 - Not on the list is `NOT_FOUND` with `reason: "not on the HFU list"`. That is information, not a failed check: most companies are not on the list. A non-Austrian UID is `NOT_APPLICABLE` (SCRUM-42) without calling the service.
 - Service down, SOAP fault or an answer we do not understand is `UNAVAILABLE`.
-- The service needs the asking party's UID (`HFU_REQUESTER_UID`), which the ÖGK logs. Whose UID that should be is still open with the customer.
+- The service requires the asking party's UID (`uidAuftraggeber`, set in `HFU_REQUESTER_UID`). The customer decided on 17 Nov 2026 to use `ATU12345678`.
 - The service rejects requests with a `SOAPAction` header, so none is sent. `HFU_URL` can point at the ÖGK test system (`agh-ws-tt`, see `.dev.vars.example`), which answers fixed test data.
 
 The Sprint 1 proof of concept (DI-07, SCRUM-25) loads the live BMF feed into a temporary database and runs one check through all adapters:
