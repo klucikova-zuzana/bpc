@@ -74,3 +74,38 @@ test('POST /api/requests: a valid VAT number gives 202 with the request ID', asy
   const row = sqlite.prepare('SELECT user_id, input_vat, input_fn FROM requests WHERE id = ?').get(requestId);
   assert.deepEqual({ ...row }, { user_id: 10, input_vat: 'ATU12345678', input_fn: '123456a' });
 });
+// SCRUM-56
+test('POST then GET /api/requests/<id>: the request is COMPLETED with one result per source', async () => {
+  const { env } = setup('clerk_request');
+  const started = await post(env, { vat: 'ATU12345678' });
+  assert.equal(started.status, 202);
+  const { requestId } = await started.json();
+
+  const response = await worker.fetch(new Request(`https://bpc.hsynrsd.dev/api/requests/${requestId}`), env);
+  assert.equal(response.status, 200);
+  const { request } = await response.json();
+  assert.equal(request.status, 'COMPLETED');
+  assert.deepEqual(
+    request.checks.map((check) => check.source),
+    ['VIES', 'BMF', 'HFU', 'FIRMENBUCH', 'GISA'],
+  );
+  // since no source is configured in tests,every check is UNAVAILABLE but it is stored
+  for (const check of request.checks) assert.equal(check.state, 'UNAVAILABLE');
+});
+
+test('POST /api/requests: with ctx the checks run in the background via waitUntil', async () => {
+  const { env } = setup('clerk_request');
+  const waiting = [];
+  const response = await worker.fetch(
+    new Request('https://bpc.hsynrsd.dev/api/requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vat: 'ATU12345678' }),
+    }),
+    env,
+    { waitUntil: (promise) => waiting.push(promise) },
+  );
+  assert.equal(response.status, 202);
+  assert.equal(waiting.length, 1);
+  await Promise.all(waiting);
+});
