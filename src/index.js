@@ -5,9 +5,12 @@
 import { bearerToken, tokenUser } from './api-token.js';
 import { clerkIdentity, currentUser } from './auth.js';
 import { refreshBmfFeed } from './bmf-feed.js';
-import { startCheck } from './check-request.js';
+import { createAdapters } from './adapters/index.js';
+import { getRequestRecord, runAndSaveChecks, startCheck } from './check-request.js';
 import { languageOf } from './language.js';
+import { mayOpen, pagesFor } from './pages.js';
 import { registerOrganisation } from './registration.js';
+import { getToken, getUser, listRequests, listTokens, listUsers, parseId } from './tenant.js';
 
 function json(body, status = 200) {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -70,11 +73,21 @@ function unauthorized({ status, error }) {
 
 async function me(request, env) {
   const caller = await apiCaller(request, env);
-  return caller.user ? json({ user: caller.user }) : unauthorized(caller);
+  // SCRUM-32: pages = the menu entries this user's role may open (src/pages.js).
+  return caller.user ? json({ user: caller.user, pages: pagesFor(caller.user.role) }) : unauthorized(caller);
+}
+
+// no-store keeps the browser from showing a page again after logout.
+async function servePage(env, request, status) {
+  const page = await env.ASSETS.fetch(request);
+  const response = new Response(page.body, { status: status ?? page.status, headers: page.headers });
+  response.headers.set('Cache-Control', 'no-store');
+  return response;
 }
 
 // Pages under /app/ are only for signed-in users; everyone else is sent to the
-// sign-in page. no-store keeps the browser from showing them again after logout.
+// sign-in page. SCRUM-32 / UI-05: each page is also only served to the roles
+// allowed to use it, so typing its URL does not get around the menu.
 async function appPage(request, env) {
   const result = await currentUser({ db: env.DB, identity: identityOf(env) }, request);
   if (result.handshake) return new Response(null, { status: 307, headers: result.handshake });
@@ -82,14 +95,17 @@ async function appPage(request, env) {
   // Signed in to Clerk but not a user here: show the start page, which says so and
   // offers logout. Redirecting to /login would loop, because /login sends anyone
   // with a Clerk session back to /app/.
-  const page = await env.ASSETS.fetch(result.user ? request : new Request(new URL('/app/', request.url), request));
-  const response = new Response(page.body, { status: result.user ? page.status : 403, headers: page.headers });
-  response.headers.set('Cache-Control', 'no-store');
-  return response;
+  if (!result.user) return servePage(env, new Request(new URL('/app/', request.url), request), 403);
+
+  const allowed = mayOpen(result.user.role, new URL(request.url).pathname);
+  if (allowed === null) return new Response('Not found', { status: 404, headers: { 'Cache-Control': 'no-store' } });
+  // Not for this role: back to the start page, which says so and shows the pages it may use.
+  if (!allowed) return Response.redirect(new URL('/app/?forbidden', request.url), 302);
+  return servePage(env, request);
 }
 
 // SCRUM-16: POST /api/requests { vat, fn } -> 202 { requestId }
-async function startCheckRoute(request, env) {
+async function startCheckRoute(request, env, ctx) {
   // Same check as /api/me: API token or Clerk session.
   const caller = await apiCaller(request, env);
   if (!caller.user) return unauthorized(caller);
@@ -98,18 +114,58 @@ async function startCheckRoute(request, env) {
   const { vat, fn } = body;
   const result = await startCheck({ db: env.DB, apiTokenId: caller.apiTokenId }, caller.user, { vat, fn });
 
-  if (result.ok) return json({ requestId: result.requestId }, 202);
-  return json({ error: result.error }, result.error === 'FORBIDDEN' ? 403 : 400);
+  if (!result.ok) return json({ error: result.error }, result.error === 'FORBIDDEN' ? 403 : 400);
+  // for scrum-56; run the checks after answering, so the caller gets the ID at once.
+  const run = runAndSaveChecks({ db: env.DB, adapters: createAdapters(env) }, result.requestId).catch((error) =>
+    console.error(`Checks for request ${result.requestId} failed: ${error.message}`),
+  );
+  // the tests call the worker without ctx, so they wait for the checks instead.
+  if (ctx?.waitUntil) ctx.waitUntil(run);
+  else await run;
+  return json({ requestId: result.requestId }, 202);
 }
+
+// SCRUM-40 / FR-USR-05: reading requests, users and tokens. Each kind has a
+// list (GET /api/<kind>) and a single item (GET /api/<kind>/<id>); both only
+// ever look inside the caller's own organisation (src/tenant.js).
+// roles: who may read this kind at all (SRS section 2.4).
+const ANY_ORG_ROLE = ['ADMIN', 'REQUEST_USER', 'REVIEW_USER'];
+const READABLE = {
+  requests: { roles: ANY_ORG_ROLE, list: listRequests, get: getRequestRecord, one: 'request' },
+  users: { roles: ['ADMIN'], list: listUsers, get: getUser, one: 'user' },
+  tokens: { roles: ['ADMIN'], list: listTokens, get: getToken, one: 'token' },
+};
+
+async function readRoute(request, env, kind, idText) {
+  const caller = await apiCaller(request, env);
+  if (!caller.user) return unauthorized(caller);
+
+  // The Super Admin is outside every organisation, so there is nothing to show.
+  const { organisationId, role } = caller.user;
+  const { roles, list, get, one } = READABLE[kind];
+  if (organisationId == null || !roles.includes(role)) return json({ error: 'FORBIDDEN' }, 403);
+
+  const deps = { db: env.DB };
+  if (idText === undefined) return json({ [kind]: await list(deps, organisationId) });
+
+  // 404 for an ID of another organisation, the same as for an ID that does not exist.
+  const id = parseId(idText);
+  const item = id === null ? null : await get(deps, organisationId, id);
+  return item ? json({ [one]: item }) : json({ error: 'NOT_FOUND' }, 404);
+}
+
+const READ_PATH = /^\/api\/(requests|users|tokens)(?:\/([^/]+))?$/;
 
 export default {
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
+    const read = request.method === 'GET' ? READ_PATH.exec(pathname) : null;
+    if (read) return readRoute(request, env, read[1], read[2]);
     if (pathname === '/api/health') return health(env);
     if (request.method === 'POST' && pathname === '/api/organisations') return register(request, env);
     if (request.method === 'GET' && pathname === '/api/config') return config(env);
     if (request.method === 'GET' && pathname === '/api/me') return me(request, env);
-    if (request.method === 'POST' && pathname === '/api/requests') return startCheckRoute(request, env);
+    if (request.method === 'POST' && pathname === '/api/requests') return startCheckRoute(request, env, ctx);
     if (pathname.startsWith('/api/')) return json({ error: 'Not found' }, 404);
     if (pathname === '/app' || pathname.startsWith('/app/')) return appPage(request, env);
     return env.ASSETS.fetch(request);

@@ -13,7 +13,7 @@ import { createViesAdapter } from './vies.js';
 
 // Same values as the CHECK constraints on check_results.
 export const SOURCES = ['VIES', 'BMF', 'HFU', 'FIRMENBUCH', 'GISA'];
-export const STATES = ['VALID', 'INVALID', 'NOT_FOUND', 'UNAVAILABLE'];
+export const STATES = ['VALID', 'INVALID', 'NOT_FOUND', 'UNAVAILABLE', 'NOT_APPLICABLE'];
 
 // One adapter per source. QS-PRF-01 allows 15 s for a whole request, so a
 // single source gets less than that.
