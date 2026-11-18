@@ -58,7 +58,7 @@ async function runOne(adapter, query, timeoutMs) {
 // Calls every adapter in parallel and returns one row per source, in the
 // shape of check_results.
 // SCRUM-42 / SCRUM-105 (CR-10): BMF, HFU, Firmenbuch and GISA cover Austria
-// only. For a partner outside Austria they are not called at all; theirnt
+// only. For a partner outside Austria they are not called at all; their
 // checks are stored as NOT_APPLICABLE. VIES covers every EU country.
 export async function runChecks(adapters, query, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   const isAustrian = splitVat(query.vat)?.countryCode === 'AT';
