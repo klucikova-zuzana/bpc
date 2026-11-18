@@ -1,8 +1,10 @@
 // SCRUM-16: start a partner check by VAT number (optional FN).
 // SCRUM-20: run the checks of a request and store their results (FR-DOC-01)
+// SCRUM-96: store one overall status per request (CR-01)
 
 import { runChecks } from './adapters/index.js';
 import { splitVat } from './adapters/vies.js';
+import { overallStatus } from './overall-status.js';
 
 // Stricter formats for some countries, on top of splitVat.
 const VAT_FORMATS = {
@@ -123,9 +125,10 @@ const insertResultSql =
  * Unlike startCheck it is a function, because completed_at must be read
  * after the checks have finished, not when the function starts.
  * Stores one check_results row per source with its state and the UTC time the
- * source was queried, then marks the request COMPLETED. All rows are written in
- * one batch, so a request never ends up with only some of its results.
- */
+  * source was queried, then marks the request COMPLETED and stores its overall
+ * status in requests.summary (SCRUM-96). All rows are written in one batch,
+ * so a request never ends up with only some of its results.
+ * */
 export async function runAndSaveChecks({ db, adapters, now = () => new Date() }, requestId) {
   // 1. Read back what was asked: the partner identifiers stored by startCheck.
   const request = await db
@@ -143,9 +146,11 @@ export async function runAndSaveChecks({ db, adapters, now = () => new Date() },
     const details = result.details == null ? null : JSON.stringify(result.details);
     return db.prepare(insertResultSql).bind(requestId, result.source, result.state, details, result.queriedAt);
   });
+  // SCRUM-96: one overall status from all check states, e.g. 'INCOMPLETE'.                          
+  const summary = overallStatus(results.map((result) => result.state));
   const complete = db
-    .prepare("UPDATE requests SET status = 'COMPLETED', completed_at = ? WHERE id = ?")
-    .bind(now().toISOString(), requestId);
+    .prepare("UPDATE requests SET status = 'COMPLETED', completed_at = ?, summary = ? WHERE id = ?")
+    .bind(now().toISOString(), summary, requestId);
   await db.batch([...rows, complete]);
   return results;
 }
@@ -158,7 +163,7 @@ export async function getRequestRecord({ db }, organisationId, requestId) {
   // 1. The request itself, only if it belongs to this organisation.
   const request = await db
     .prepare(
-      `SELECT id, organisation_id, user_id, api_token_id, input_vat, input_fn, status, started_at, completed_at
+      `SELECT id, organisation_id, user_id, api_token_id, input_vat, input_fn, status, summary, started_at, completed_at
        FROM requests
        WHERE id = ? AND organisation_id = ?`,
     )
@@ -183,6 +188,7 @@ export async function getRequestRecord({ db }, organisationId, requestId) {
     vat: request.input_vat,
     fn: request.input_fn,
     status: request.status,
+    overallStatus: request.summary,
     startedAt: request.started_at,
     completedAt: request.completed_at,
     checks: results.map((row) => ({

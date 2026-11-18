@@ -58,6 +58,7 @@ test('a completed request is stored with every proof field', async () => {
     vat: 'ATU12345678',
     fn: '123456a',
     status: 'COMPLETED',
+    overallStatus: 'ISSUE_FOUND',
     startedAt: '2026-11-02T09:00:00.000Z',
     completedAt: '2026-11-02T09:00:05.000Z',
   });
@@ -100,8 +101,8 @@ test('if one result cannot be saved, nothing is saved and the request stays RUNN
   await assert.rejects(runAndSaveChecks({ db, adapters: twiceVies }, requestId));
 
   assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM check_results').get().n, 0);
-  const row = sqlite.prepare('SELECT status, completed_at FROM requests WHERE id = ?').get(requestId);
-  assert.deepEqual({ ...row }, { status: 'RUNNING', completed_at: null });
+  const row = sqlite.prepare('SELECT status, completed_at, summary FROM requests WHERE id = ?').get(requestId);
+  assert.deepEqual({ ...row }, { status: 'RUNNING', completed_at: null, summary: null });
 });
 
 test('a request of another organisation cannot be read', async () => {
