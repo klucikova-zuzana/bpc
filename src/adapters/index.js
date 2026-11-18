@@ -9,7 +9,7 @@ import { createBmfAdapter } from './bmf.js';
 import { createFirmenbuchAdapter } from './firmenbuch.js';
 import { createGisaAdapter } from './gisa.js';
 import { createHfuAdapter } from './hfu.js';
-import { createViesAdapter } from './vies.js';
+import { createViesAdapter, splitVat } from './vies.js';
 
 // Same values as the CHECK constraints on check_results.
 export const SOURCES = ['VIES', 'BMF', 'HFU', 'FIRMENBUCH', 'GISA'];
@@ -57,12 +57,27 @@ async function runOne(adapter, query, timeoutMs) {
 
 // Calls every adapter in parallel and returns one row per source, in the
 // shape of check_results.
+// SCRUM-42 / SCRUM-105 (CR-10): BMF, HFU, Firmenbuch and GISA cover Austria
+// only. For a partner outside Austria they are not called at all; theirnt
+// checks are stored as NOT_APPLICABLE. VIES covers every EU country.
 export async function runChecks(adapters, query, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+  const isAustrian = splitVat(query.vat)?.countryCode === 'AT';
   return Promise.all(
-    adapters.map(async (adapter) => ({
-      source: adapter.source,
-      ...(await runOne(adapter, query, timeoutMs)),
-      queriedAt: new Date().toISOString(),
-    })),
+    adapters.map(async (adapter) => {
+      if (!isAustrian && adapter.source !== 'VIES') {
+        return {
+          source: adapter.source,
+          state: 'NOT_APPLICABLE',
+          details: { note: 'Austrian register only' },
+          queriedAt: new Date().toISOString(),
+        };
+      }
+      return {
+        source: adapter.source,
+        ...(await runOne(adapter, query, timeoutMs)),
+        queriedAt: new Date().toISOString(),
+      };
+    }),
   );
 }
+

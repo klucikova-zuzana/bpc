@@ -56,7 +56,7 @@ test('a check still has exactly one result per source', () => {
 test('an adapter that answers NOT_APPLICABLE keeps that state', async () => {
   const [result] = await runChecks(
     [{ source: 'GISA', check: async () => ({ state: 'NOT_APPLICABLE', details: { reason: 'Partner outside Austria' } }) }],
-    { vat: 'DE123456789', fn: null },
+    { vat: 'ATU12345678', fn: null },
   );
   assert.equal(result.state, 'NOT_APPLICABLE'); // not turned into UNAVAILABLE
   assert.deepEqual(result.details, { reason: 'Partner outside Austria' });
@@ -80,4 +80,45 @@ test('results stored before migration 0006 are kept unchanged', () => {
   const after = sqlite.prepare('SELECT * FROM check_results ORDER BY id').all();
   assert.deepEqual(after, before);
   insertResult(sqlite, 'GISA', 'NOT_APPLICABLE'); // and the new state works on the old data
+});
+
+
+// SCRUM-42 / SCRUM-105 (CR-10): a partner outside Austria.
+// Five fake sources that remember whether they were called.
+function recordingSources() {
+  const called = [];
+  const adapters = ['VIES', 'BMF', 'HFU', 'FIRMENBUCH', 'GISA'].map((source) => ({
+    source,
+    check: async () => {
+      called.push(source);
+      return { state: 'VALID', details: null };
+    },
+  }));
+  return { adapters, called };
+}
+
+test('outside Austria only VIES is called, the four Austrian checks are NOT_APPLICABLE', async () => {
+  const { adapters, called } = recordingSources();
+  const results = await runChecks(adapters, { vat: 'DE123456789', fn: null });
+
+  assert.deepEqual(called, ['VIES']); // BMF, HFU, Firmenbuch and GISA are not called
+  assert.deepEqual(
+    results.map(({ source, state, details }) => ({ source, state, details })),
+    [
+      { source: 'VIES', state: 'VALID', details: null },
+      { source: 'BMF', state: 'NOT_APPLICABLE', details: { note: 'Austrian register only' } },
+      { source: 'HFU', state: 'NOT_APPLICABLE', details: { note: 'Austrian register only' } },
+      { source: 'FIRMENBUCH', state: 'NOT_APPLICABLE', details: { note: 'Austrian register only' } },
+      { source: 'GISA', state: 'NOT_APPLICABLE', details: { note: 'Austrian register only' } },
+    ],
+  );
+  for (const result of results) assert.ok(result.queriedAt, `${result.source} has no time`);
+});
+
+test('an Austrian partner still gets all five checks', async () => {
+  const { adapters, called } = recordingSources();
+  const results = await runChecks(adapters, { vat: 'ATU12345678', fn: null });
+
+  assert.deepEqual(called.sort(), ['BMF', 'FIRMENBUCH', 'GISA', 'HFU', 'VIES']);
+  for (const result of results) assert.equal(result.state, 'VALID');
 });
