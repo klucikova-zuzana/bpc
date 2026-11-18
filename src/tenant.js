@@ -14,7 +14,7 @@ export function parseId(text) {
   return /^[1-9]\d{0,14}$/.test(text) ? Number(text) : null;
 }
 
-const REQUEST_COLUMNS = 'id, user_id, api_token_id, input_vat, input_fn, status, started_at, completed_at';
+const REQUEST_COLUMNS = 'id, user_id, api_token_id, input_vat, input_fn, status, summary, started_at, completed_at';
 
 /** All requests of the organisation, newest first. */
 export async function listRequests({ db }, organisationId) {
@@ -29,6 +29,7 @@ export async function listRequests({ db }, organisationId) {
     vat: row.input_vat,
     fn: row.input_fn,
     status: row.status,
+    overallStatus: row.summary,
     startedAt: row.started_at,
     completedAt: row.completed_at,
   }));

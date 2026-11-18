@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { getRequestRecord, runAndSaveChecks, startCheck } from '../src/check-request.js';
 import { OVERALL_STATUSES, overallStatus } from '../src/overall-status.js';
 import { d1, migratedDatabase } from './d1.js';
+import { listRequests } from '../src/tenant.js';
 
 // --- The rules (no database needed) ---
 
@@ -105,3 +106,18 @@ test('a request that is still running has no overall status yet', async () => {
   assert.equal(record.status, 'RUNNING');
   assert.equal(record.overallStatus, null);
 });
+
+// SCRUM-96: the list shows it too, so the status is visible at a glance.
+test('the request list shows the overall status too', async () => {
+  const { db, user } = setup();
+  const { requestId } = await startCheck({ db, now }, user, { vat: 'ATU12345678' });
+  await runAndSaveChecks(
+    { db, adapters: sourcesAnswering(['VALID', 'INVALID', 'VALID', 'VALID', 'VALID']) },
+    requestId,
+  );
+
+  const [listed] = await listRequests({ db }, 1);
+  assert.equal(listed.id, requestId);
+  assert.equal(listed.overallStatus, 'ISSUE_FOUND');
+});
+
